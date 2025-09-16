@@ -1,50 +1,43 @@
-require('dotenv').config();
 const express = require('express');
-const http = require('http');
-const mongoose = require('mongoose');
+const multer = require('multer');
+const path = require('path');
 const cors = require('cors');
-const { initSockets } = require('./sockets');   // sockets.js ھۆججىتىنى قوشىمىز
-const cloudinary = require('cloudinary').v2;
 const fs = require('fs');
-const Course = require('./models/Course');
-
-// مارشروتلار
-const authRoutes = require('./routes/auth');
-const courseRoutes = require('./routes/courses');
-const topicRoutes = require('./routes/topics');
-const messageRoutes = require('./routes/messages');
 
 const app = express();
-const server = http.createServer(app);
-
-// Socket.io قوشۇش
-const io = require('socket.io')(server, {
-  cors: {
-    origin: process.env.CLIENT_URL || '*',
-    methods: ['GET', 'POST']
-  }
-});
-
-// socket ئىشقا قوشۇش
-initSockets(io);
-
-// MongoDB قا ئۇلاش
-mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('✅ MongoDB ئۇلاندى'))
-  .catch(err => console.error('❌ MongoDB ئۇلىنىش خاتالىقى', err));
-
-app.use(cors({ origin: process.env.CLIENT_URL || true }));
+app.use(cors());
 app.use(express.json());
 
-// مارشروتلار ئىشقا قوشۇش
-app.use('/api/auth', authRoutes);
-app.use('/api/courses', courseRoutes);
-app.use('/api/topics', topicRoutes);
-app.use('/api/messages', messageRoutes);
+// uploads فولدىرىنى يارات
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 
-// سىناق ئۈچۈن بەت
-app.get('/', (req, res) => res.send('📚 Online Courses Backend ئىجرا بولۇۋاتىدۇ'));
+// Multer تەڭشەش
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/');
+  },
+  filename: function (req, file, cb) {
+    cb(null, Date.now() + '-' + file.originalname);
+  }
+});
+const upload = multer({ storage: storage });
 
-// Port ئىشقا قوشۇش
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => console.log(`🚀 Server port ${PORT} دا ئىجرا بولۇۋاتىدۇ`));
+// بىر فايىل يۈكلەش API
+app.post('/upload', upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).send('فايىل يۈكلەنمىدى');
+  res.json({ message: 'فايىل مۇۋەپپەقىيەتلىك يۈكلەندى', file: req.file });
+});
+
+// كۆپ فايىل يۈكلەش API
+app.post('/upload-multiple', upload.array('files', 10), (req, res) => {
+  if (!req.files) return res.status(400).send('فايىللار يۈكلەنمىدى');
+  res.json({ message: 'فايىللار مۇۋەپپەقىيەتلىك يۈكلەندى', files: req.files });
+});
+
+// فايىللارغا توردا كۆرۈنىش رۇخسەت
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+app.listen(5000, () => {
+  console.log('Server 5000 portتا ئىشلەۋاتىدۇ...');
+});
